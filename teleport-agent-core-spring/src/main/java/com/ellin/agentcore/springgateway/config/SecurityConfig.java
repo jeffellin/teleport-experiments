@@ -40,7 +40,7 @@ public class SecurityConfig {
         http
                 .authorizeExchange(authorize ->
                         authorize
-                                .pathMatchers("/.well-known/**", "/actuator/health").permitAll()
+                                .pathMatchers("/.well-known/**", "/actuator/**").permitAll()
                                 .anyExchange().authenticated()
                 )
                 .csrf(ServerHttpSecurity.CsrfSpec::disable);

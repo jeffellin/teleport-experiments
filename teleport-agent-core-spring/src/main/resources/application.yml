@@ -30,10 +30,20 @@ agentcore:
   issuer: https://your-gateway.example.com
   audience: agentcore-gateway
 
+# Actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
 # Logging
 logging:
   level:
     root: INFO
-    com.example.demo: DEBUG
+    com.ellin.agentcore.springgateway: DEBUG
     org.springframework.cloud.gateway: DEBUG
     org.springframework.security: DEBUG
