@@ -15,9 +15,8 @@ AgentCore Gateway requires OAuth 2.0 Bearer tokens from a trusted issuer. Telepo
 
 ## Architecture
 
-<iframe src="identity-flow-diagram.html" width="100%" height="800" frameborder="0"></iframe>
 
-*[View full diagram](identity-flow-diagram.html)*
+*[View full diagram]( https://jeffellin.github.io/teleport-experiments//teleport-agent-core-spring/identity-flow-diagram.html)*
 
 ### Component Responsibilities
 
