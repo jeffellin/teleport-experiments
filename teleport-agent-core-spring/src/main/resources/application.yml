@@ -1,0 +1,39 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: spring-gateway
+  cloud:
+    gateway:
+      routes:
+        # Route all /mcp/** requests to AgentCore Gateway
+        - id: agentcore-mcp
+          uri: https://gateway.bedrock-agentcore.us-east-1.amazonaws.com
+          predicates:
+            - Path=/mcp/**
+          filters:
+            - StripPrefix=0
+
+# Teleport configuration
+teleport:
+  # TODO: Replace with your actual Teleport JWKS URI
+  jwks-uri: https://teleport.example.com/webapi/jwks
+  validation:
+    # Set to false to disable JWT signature/expiration validation (for testing only)
+    # JWT will still be decoded and user_name/roles claims will be extracted
+    enabled: true
+
+# AgentCore configuration
+agentcore:
+  # TODO: Replace with your actual gateway domain
+  issuer: https://your-gateway.example.com
+  audience: agentcore-gateway
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.example.demo: DEBUG
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework.security: DEBUG
