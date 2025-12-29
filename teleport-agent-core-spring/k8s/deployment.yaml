@@ -7,7 +7,8 @@ metadata:
     app: spring-gateway
     version: v1
 spec:
-  replicas: 2
+  # This can't be larger than 1,  the RSA key isn't shared between instances
+  replicas: 1
   selector:
     matchLabels:
       app: spring-gateway
