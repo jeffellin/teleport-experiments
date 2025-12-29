@@ -1,0 +1,35 @@
+version: v3
+teleport:
+  # Join your Teleport cluster
+  proxy_server: ellinj.teleport.sh:443
+  auth_token: /path/to/token  # Update with your join token or use --token flag
+
+app_service:
+  enabled: true
+
+  apps:
+  - name: "agentid"
+    description: "Spring Gateway for AgentCore Integration"
+
+    # Backend URI - your deployed app
+    uri: "https://agentid.ellin.net"
+
+    # Public hostname - how users access via Teleport
+    public_addr: "agentcoregateway.ellinj.teleport.sh"
+
+    # Labels for organization
+    labels:
+      env: "dev"
+      app: "spring-gateway"
+
+# SSH service disabled for app-only proxy
+ssh_service:
+  enabled: false
+
+# Proxy service disabled - we're just an app server
+proxy_service:
+  enabled: false
+
+# Auth service disabled - we connect to existing auth
+auth_service:
+  enabled: false

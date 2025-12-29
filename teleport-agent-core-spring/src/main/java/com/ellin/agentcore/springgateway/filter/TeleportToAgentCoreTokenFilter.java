@@ -72,28 +72,54 @@ public class TeleportToAgentCoreTokenFilter implements GlobalFilter, Ordered {
         System.out.println("=== TeleportToAgentCoreTokenFilter.filter() called ===");
         System.out.println("Request path: " + exchange.getRequest().getPath());
 
-        String authHeader = exchange.getRequest()
+        // Try Teleport-specific header first (used with mTLS)
+        // Note: Ingress controllers may lowercase headers, so check both variants
+        String token = exchange.getRequest()
                 .getHeaders()
-                .getFirst(HttpHeaders.AUTHORIZATION);
+                .getFirst("X-Teleport-Jwt-Assertion");
 
-        System.out.println("Authorization header: " + (authHeader != null ? "present" : "missing"));
+        if (token == null) {
+            token = exchange.getRequest()
+                    .getHeaders()
+                    .getFirst("teleport-jwt-assertion");
+        }
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            System.out.println("No Bearer token found, passing through without modification");
+        if (token != null) {
+            System.out.println("Found JWT in Teleport-Jwt-Assertion header");
+        } else {
+            // Fall back to standard Authorization header
+            String authHeader = exchange.getRequest()
+                    .getHeaders()
+                    .getFirst(HttpHeaders.AUTHORIZATION);
+
+            System.out.println("Authorization header: " + (authHeader != null ? "present" : "missing"));
+
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                token = authHeader.substring(7);
+                System.out.println("Found JWT in Authorization: Bearer header");
+            }
+        }
+
+        if (token == null) {
+            System.out.println("No JWT found in X-Teleport-Jwt-Assertion or Authorization headers, passing through without modification");
             return chain.filter(exchange);
         }
 
-        System.out.println("Bearer token found, processing...");
-        String teleportToken = authHeader.substring(7);
+        final String teleportToken = token;
+        System.out.println("Processing JWT token...");
 
         return Mono.fromCallable(() -> {
                     // Decode Teleport JWT (validates only if validation enabled)
+                    System.out.println("Decoding Teleport JWT...");
                     Jwt teleportJwt = jwtDecoder.decode(teleportToken);
+                    System.out.println("JWT decoded successfully. Claims: " + teleportJwt.getClaims().keySet());
 
-                    // Extract user_name claim
-                    String username = teleportJwt.getClaimAsString("user_name");
+                    // Extract username claim (Teleport uses 'username', not 'user_name')
+                    String username = teleportJwt.getClaimAsString("username");
+                    System.out.println("Extracted username: " + username);
                     if (username == null) {
-                        throw new IllegalArgumentException("Missing user_name claim");
+                        System.err.println("!!! Missing username claim in JWT. Available claims: " + teleportJwt.getClaims().keySet());
+                        throw new IllegalArgumentException("Missing username claim");
                     }
 
                     // Carry forward additional claims
@@ -104,18 +130,36 @@ public class TeleportToAgentCoreTokenFilter implements GlobalFilter, Ordered {
                     }
 
                     // Mint new token
-                    return tokenMinter.mintToken(username, additionalClaims);
+                    System.out.println("Minting new AgentCore token for user: " + username);
+                    String newToken = tokenMinter.mintToken(username, additionalClaims);
+                    System.out.println("Successfully minted new token");
+                    return newToken;
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(agentCoreToken -> {
+                    System.out.println("Setting Authorization header with new AgentCore token");
+                    System.out.println("NEW AGENTCORE TOKEN: " + agentCoreToken);
+
                     ServerHttpRequest mutatedRequest = exchange.getRequest()
                             .mutate()
-                            .headers(h -> h.setBearerAuth(agentCoreToken))
+                            .headers(h -> {
+                                // Remove Teleport JWT headers (not needed by AgentCore)
+                                h.remove("X-Teleport-Jwt-Assertion");
+                                h.remove("teleport-jwt-assertion");
+                                // Remove Authorization header if it exists
+                                h.remove("Authorization");
+                                // Set the new AgentCore JWT
+                                h.set("Authorization", "Bearer " + agentCoreToken);
+                                System.out.println("Authorization header set successfully");
+                            })
                             .build();
 
                     return chain.filter(exchange.mutate().request(mutatedRequest).build());
                 })
                 .onErrorResume(e -> {
+                    System.err.println("!!! ERROR in TeleportToAgentCoreTokenFilter: " + e.getClass().getName());
+                    System.err.println("!!! Error message: " + e.getMessage());
+                    e.printStackTrace();
                     exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
                     return exchange.getResponse().setComplete();
                 });

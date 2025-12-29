@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: spring-gateway
-        image: ellinj/spring-agent-gateway:latest
+        image: ellinj/spring-gateway:latest
         imagePullPolicy: Always
         ports:
         - name: http

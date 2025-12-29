@@ -34,3 +34,7 @@ build/
 
 ### macOS ###
 .DS_Store
+
+### Teleport ###
+teleport-data/
+teleport.yml.backup

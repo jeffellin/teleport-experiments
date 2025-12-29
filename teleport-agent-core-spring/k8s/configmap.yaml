@@ -9,9 +9,9 @@ data:
   teleport.validation.enabled: "false"
 
   # AgentCore configuration
-  agentcore.endpoint: "https://testgwforlambdaiam-ool6a9jhvm.gateway.bedrock-agentcore.us-east-2.amazonaws.com"
+  agentcore.endpoint: "https://jetestgwoauth-umjturwffk.gateway.bedrock-agentcore.us-east-2.amazonaws.com"
   agentcore.endpoint.ws: "wss://gateway.bedrock-agentcore.us-east-1.amazonaws.com"
-  agentcore.endpoint.mcp: "hhttps://testgwforlambdaiam-ool6a9jhvm.gateway.bedrock-agentcore.us-east-2.amazonaws.com"
+  agentcore.endpoint.mcp: "https://jetestgwoauth-umjturwffk.gateway.bedrock-agentcore.us-east-2.amazonaws.com"
   agentcore.issuer: "https://agentid.ellin.net"
   agentcore.audience: "agentcore-gateway"
 

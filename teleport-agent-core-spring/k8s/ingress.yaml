@@ -7,23 +7,8 @@ metadata:
     # cert-manager will automatically create the certificate
     cert-manager.io/cluster-issuer: letsencrypt-prod
 
-    # Nginx ingress controller annotations (adjust for your ingress controller)
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-
-    # WebSocket support
-    nginx.ingress.kubernetes.io/websocket-services: spring-gateway
-
-    # Increase timeouts for long-running requests
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-
-    # Body size limit
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-
 spec:
-  ingressClassName: nginx
+  ingressClassName: contour
   tls:
   - hosts:
     - agentid.ellin.net

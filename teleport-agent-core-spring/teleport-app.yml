@@ -1,0 +1,16 @@
+version: v3
+teleport:
+  data_dir: ./teleport-data
+  proxy_server: ellinj.teleport.sh:443
+
+app_service:
+  enabled: true
+
+ssh_service:
+  enabled: false
+
+proxy_service:
+  enabled: false
+
+auth_service:
+  enabled: false

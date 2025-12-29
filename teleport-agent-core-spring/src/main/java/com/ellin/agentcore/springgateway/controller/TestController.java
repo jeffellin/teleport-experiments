@@ -22,10 +22,27 @@ public class TestController {
     public Mono<ResponseEntity<Map<String, Object>>> echo(ServerWebExchange exchange) {
         Map<String, Object> response = new HashMap<>();
 
+        // Check for Teleport JWT header (mTLS)
+        // Note: Ingress controllers may lowercase headers, so check both variants
+        String teleportJwt = exchange.getRequest().getHeaders().getFirst("X-Teleport-Jwt-Assertion");
+        if (teleportJwt == null) {
+            teleportJwt = exchange.getRequest().getHeaders().getFirst("teleport-jwt-assertion");
+        }
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
 
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String jwt = authHeader.substring(7);
+        String jwt = null;
+        String source = null;
+
+        if (teleportJwt != null) {
+            jwt = teleportJwt;
+            source = "Teleport-Jwt-Assertion";
+        } else if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            jwt = authHeader.substring(7);
+            source = "Authorization: Bearer";
+        }
+
+        if (jwt != null) {
+            response.put("jwt_source", source);
             response.put("jwt_token", jwt);
 
             // Decode JWT payload
@@ -45,7 +62,7 @@ public class TestController {
                 response.put("jwt_decode_error", e.getMessage());
             }
         } else {
-            response.put("error", "No Authorization header found");
+            response.put("error", "No JWT found in X-Teleport-Jwt-Assertion or Authorization headers");
         }
 
         response.put("path", exchange.getRequest().getPath().toString());

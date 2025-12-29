@@ -43,6 +43,7 @@ public class AgentCoreTokenMinter {
                 .audience(List.of(audience))
                 .claim("scope", "mcp:invoke mcp:tools")
                 .claim("username", teleportUsername)                // Explicit claim
+                .claim("user_name", teleportUsername)               // Alternative claim format for compatibility
                 .claim("auth_source", "teleport")                   // Provenance
                 .claims(c -> c.putAll(additionalClaims))
                 .build();

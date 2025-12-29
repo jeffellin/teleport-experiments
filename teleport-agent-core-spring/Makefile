@@ -2,7 +2,7 @@
 
 IMAGE_NAME ?= spring-gateway
 IMAGE_TAG ?= latest
-REGISTRY ?=
+REGISTRY ?= ellinj
 NAMESPACE ?= default
 
 help: ## Show this help message
@@ -45,10 +45,10 @@ docker-push-multi: ## Build and push multi-platform image to registry
 		--push .
 
 k8s-deploy: ## Deploy to Kubernetes
-	kubectl apply -k k8s/ -n $(NAMESPACE)
+	kubectl apply -f k8s/ -n $(NAMESPACE)
 
 k8s-delete: ## Delete from Kubernetes
-	kubectl delete -k k8s/ -n $(NAMESPACE)
+	kubectl delete -f k8s/ -n $(NAMESPACE)
 
 k8s-restart: ## Restart deployment
 	kubectl rollout restart deployment spring-gateway -n $(NAMESPACE)
@@ -84,6 +84,20 @@ clean: ## Clean build artifacts
 
 run: ## Run locally with Maven
 	./mvnw spring-boot:run
+
+teleport-start: ## Start Teleport app service (requires TOKEN=your-token)
+	@if [ -z "$(TOKEN)" ]; then \
+		echo "Error: TOKEN not set. Usage: make teleport-start TOKEN=your-token"; \
+		exit 1; \
+	fi
+	@mkdir -p ./teleport-data
+	teleport start \
+		--config=teleport-app.yml \
+		--token=$(TOKEN) \
+		--app-name=agentid \
+		--app-uri=http://localhost:8082 \
+		--labels=env=dev,app=spring-gateway \
+		--debug
 
 all: build docker-build ## Build everything
 
