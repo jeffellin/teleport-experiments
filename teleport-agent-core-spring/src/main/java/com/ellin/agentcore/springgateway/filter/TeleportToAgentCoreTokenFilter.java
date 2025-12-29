@@ -36,11 +36,17 @@ public class TeleportToAgentCoreTokenFilter implements GlobalFilter, Ordered {
         this.tokenMinter = tokenMinter;
         this.validationEnabled = validationEnabled;
 
+        System.out.println("=== TeleportToAgentCoreTokenFilter Initializing ===");
+        System.out.println("Validation enabled: " + validationEnabled);
+        System.out.println("JWKS URI: " + teleportJwksUri);
+
         if (validationEnabled) {
             // Validate signature and expiration
+            System.out.println("Creating validating JWT decoder");
             this.jwtDecoder = NimbusJwtDecoder.withJwkSetUri(teleportJwksUri).build();
         } else {
             // Decode without validation - use custom decoder
+            System.out.println("Creating non-validating JWT decoder");
             this.jwtDecoder = token -> {
                 try {
                     JWT jwt = JWTParser.parse(token);
@@ -58,18 +64,26 @@ public class TeleportToAgentCoreTokenFilter implements GlobalFilter, Ordered {
                 }
             };
         }
+        System.out.println("=== TeleportToAgentCoreTokenFilter Initialized Successfully ===");
     }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        System.out.println("=== TeleportToAgentCoreTokenFilter.filter() called ===");
+        System.out.println("Request path: " + exchange.getRequest().getPath());
+
         String authHeader = exchange.getRequest()
                 .getHeaders()
                 .getFirst(HttpHeaders.AUTHORIZATION);
 
+        System.out.println("Authorization header: " + (authHeader != null ? "present" : "missing"));
+
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            System.out.println("No Bearer token found, passing through without modification");
             return chain.filter(exchange);
         }
 
+        System.out.println("Bearer token found, processing...");
         String teleportToken = authHeader.substring(7);
 
         return Mono.fromCallable(() -> {

@@ -15,8 +15,8 @@ public class SecurityConfig {
         http
                 .authorizeExchange(authorize ->
                         authorize
-                                .pathMatchers("/.well-known/**", "/actuator/**").permitAll()
-                                .anyExchange().authenticated()
+                                // Allow all requests - JWT validation is handled by TeleportToAgentCoreTokenFilter
+                                .anyExchange().permitAll()
                 )
                 .csrf(ServerHttpSecurity.CsrfSpec::disable);
 

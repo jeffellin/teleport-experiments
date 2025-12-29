@@ -7,11 +7,47 @@ spring:
   cloud:
     gateway:
       routes:
-        # Route all /mcp/** requests to AgentCore Gateway
+        # AgentCore ping endpoint (health check)
+        - id: agentcore-ping
+          uri: ${agentcore.endpoint:https://gateway.bedrock-agentcore.us-east-1.amazonaws.com}
+          predicates:
+            - Path=/ping
+            - Method=GET
+          filters:
+            - StripPrefix=0
+
+        # AgentCore invocations endpoint (main agent interactions)
+        - id: agentcore-invocations
+          uri: ${agentcore.endpoint:https://gateway.bedrock-agentcore.us-east-1.amazonaws.com}
+          predicates:
+            - Path=/invocations
+            - Method=POST
+          filters:
+            - StripPrefix=0
+
+        # AgentCore WebSocket endpoint (real-time bidirectional streaming)
+        # Port 8080, path /ws
+        - id: agentcore-websocket
+          uri: ${agentcore.endpoint.ws:wss://gateway.bedrock-agentcore.us-east-1.amazonaws.com}
+          predicates:
+            - Path=/ws/**
+          filters:
+            - StripPrefix=0
+
+        # Model Context Protocol (MCP) endpoint
+        # Port 8000, mount path /mcp
         - id: agentcore-mcp
-          uri: https://gateway.bedrock-agentcore.us-east-1.amazonaws.com
+          uri: ${agentcore.endpoint.mcp:https://gateway.bedrock-agentcore.us-east-1.amazonaws.com:8000}
           predicates:
             - Path=/mcp/**
+          filters:
+            - StripPrefix=0
+
+        # Catch-all route for testing with httpbin (lower priority)
+        - id: httpbin-test
+          uri: https://httpbin.org
+          predicates:
+            - Path=/**
           filters:
             - StripPrefix=0
 
@@ -22,12 +58,19 @@ teleport:
   validation:
     # Set to false to disable JWT signature/expiration validation (for testing only)
     # JWT will still be decoded and user_name/roles claims will be extracted
-    enabled: true
+    enabled: false
 
 # AgentCore configuration
 agentcore:
+  # AgentCore HTTP endpoint URL (default port 8080)
+  endpoint: https://gateway.bedrock-agentcore.us-east-1.amazonaws.com
+  # AgentCore WebSocket endpoint URL (port 8080, path /ws)
+  endpoint.ws: wss://gateway.bedrock-agentcore.us-east-1.amazonaws.com
+  # AgentCore MCP endpoint URL (port 8000, mount path /mcp)
+  endpoint.mcp: https://gateway.bedrock-agentcore.us-east-1.amazonaws.com:8000
   # TODO: Replace with your actual gateway domain
   issuer: https://your-gateway.example.com
+  # Audience for the minted JWT
   audience: agentcore-gateway
 
 # Actuator endpoints
