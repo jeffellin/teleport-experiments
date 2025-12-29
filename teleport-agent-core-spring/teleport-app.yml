@@ -1,10 +1,25 @@
+# Teleport App Service Configuration - LOCAL DEVELOPMENT
+# Proxies Teleport app "agentid" to local Spring Gateway at http://localhost:8082
+# Usage: teleport start -c teleport-app.yml --token=<your-token>
+#   or: ./start-with-teleport.sh <your-token>
+#
 version: v3
 teleport:
   data_dir: ./teleport-data
   proxy_server: ellinj.teleport.sh:443
+  log:
+    severity: DEBUG
+    output: stderr
 
 app_service:
   enabled: true
+  debug_app: true
+  apps:
+  - name: agentid
+    uri: https://agentid.ellin.net
+    labels:
+      env: dev
+      app: spring-gateway
 
 ssh_service:
   enabled: false

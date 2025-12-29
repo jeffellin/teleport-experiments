@@ -37,28 +37,22 @@ trap cleanup SIGINT SIGTERM
 
 # Start Teleport if token provided
 if [ -n "$TOKEN" ]; then
-    echo -e "${GREEN}2. Starting Teleport App Service${NC}"
-    echo "Connecting to: ellinj.teleport.sh"
-    echo "App will be available at: https://agentid.ellinj.teleport.sh"
-    echo "Proxying to: http://localhost:8082"
+    echo -e "${GREEN}Starting Teleport App Service${NC}"
+    echo "Config: teleport-app.yml"
+    echo "Cluster: ellinj.teleport.sh"
+    echo "App: agentid → http://localhost:8082"
     echo ""
 
     # Create local data directory
     mkdir -p ./teleport-data
 
-    teleport start \
-        --config=teleport-app.yml \
-        --token="$TOKEN" \
-        --app-name=agentid \
-        --app-uri=http://localhost:8082 \
-        --labels=env=dev,app=spring-gateway \
-        --debug &
+    teleport start -c teleport-app.yml --token="$TOKEN" &
     TELEPORT_PID=$!
 
     echo -e "\n${GREEN}✓ Teleport App Service is running${NC}\n"
-    echo -e "${YELLOW}Users can now access:${NC}"
+    echo -e "${YELLOW}Access via Teleport:${NC}"
     echo "  tsh app login agentid"
-    echo "  curl https://agentcoregateway.ellinj.teleport.sh/actuator/health"
+    echo "  curl --cert ~/.tsh/keys/.../agentid.crt --key ~/.tsh/keys/.../agentid.key https://agentid.ellinj.teleport.sh/test/echo"
 else
     echo -e "${YELLOW}Running without Teleport (local only)${NC}\n"
     echo "To add Teleport later, restart with:"

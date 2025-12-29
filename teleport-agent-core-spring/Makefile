@@ -91,13 +91,7 @@ teleport-start: ## Start Teleport app service (requires TOKEN=your-token)
 		exit 1; \
 	fi
 	@mkdir -p ./teleport-data
-	teleport start \
-		--config=teleport-app.yml \
-		--token=$(TOKEN) \
-		--app-name=agentid \
-		--app-uri=http://localhost:8082 \
-		--labels=env=dev,app=spring-gateway \
-		--debug
+	teleport start -c teleport-app.yml --token=$(TOKEN)
 
 all: build docker-build ## Build everything
 

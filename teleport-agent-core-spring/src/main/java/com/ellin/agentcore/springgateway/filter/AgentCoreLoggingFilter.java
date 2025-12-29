@@ -60,8 +60,8 @@ public class AgentCoreLoggingFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        // Run after RouteToRequestUrlFilter (10000) which sets the target URI
-        // but before routing filters (NettyRoutingFilter at 2147483647)
-        return 10001;
+        // Run after HostHeaderFilter (10001) which updates the Host header
+        // and before routing filters (NettyRoutingFilter at 2147483647)
+        return 10002;
     }
 }

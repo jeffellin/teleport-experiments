@@ -57,29 +57,26 @@ public class WellKnownController {
 
     /**
      * OpenID Connect Discovery endpoint
-     * Provides metadata about this authorization server
+     * Provides minimal metadata for JWT validation only
+     * AgentCore will use this to discover the JWKS endpoint and validate JWTs
+     *
+     * Note: This is NOT an OAuth2 authorization server - we don't issue tokens via OAuth2 flows.
+     * JWTs are minted internally by the gateway and sent directly to AgentCore.
+     * AgentCore only needs to validate the JWT signature and claims.
      */
     @GetMapping(value = "/openid-configuration", produces = MediaType.APPLICATION_JSON_VALUE)
     public Mono<Map<String, Object>> openidConfiguration() {
         Map<String, Object> config = new HashMap<>();
 
-        config.put("issuer", issuer);
-        config.put("jwks_uri", issuer + "/.well-known/jwks.json");
+        // Essential fields for JWT validation
+        config.put("issuer", issuer);  // Matches the 'iss' claim in minted JWTs
+        config.put("jwks_uri", issuer + "/.well-known/jwks.json");  // Where to get public keys
+        config.put("id_token_signing_alg_values_supported", List.of("RS256"));  // Signature algorithm
+        config.put("subject_types_supported", List.of("public"));  // OIDC standard field
 
-        // Supported signing algorithms
-        config.put("id_token_signing_alg_values_supported", List.of("RS256"));
-
-        // Token endpoint (not implemented but included for completeness)
-        config.put("token_endpoint", issuer + "/token");
-
-        // Supported grant types
-        config.put("grant_types_supported", List.of("client_credentials"));
-
-        // Supported response types
-        config.put("response_types_supported", List.of("token"));
-
-        // Supported scopes
-        config.put("scopes_supported", List.of("mcp:invoke", "mcp:tools"));
+        // No token_endpoint - we don't implement OAuth2 token issuance
+        // No grant_types_supported - we don't support OAuth2 flows
+        // JWTs are provided directly in Authorization header
 
         return Mono.just(config);
     }
