@@ -30,31 +30,31 @@ public class AgentCoreLoggingFilter implements GlobalFilter, Ordered {
         URI targetUri = exchange.getAttribute("org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayRequestUrl");
 
         if (targetUri != null) {
-            log.info("=== Outbound Request to AgentCore ===");
-            log.info("Method: {}", request.getMethod());
-            log.info("Target URI: {}", targetUri);
-            log.info("Path: {}", request.getPath());
-            log.info("Headers:");
+            log.debug("=== Outbound Request to AgentCore ===");
+            log.debug("Method: {}", request.getMethod());
+            log.debug("Target URI: {}", targetUri);
+            log.debug("Path: {}", request.getPath());
+            log.debug("Headers:");
             request.getHeaders().forEach((name, values) -> {
                 values.forEach(value -> {
                     // Log all headers including full JWT tokens for verification
-                    log.info("  {}: {}", name, value);
+                    log.debug("  {}: {}", name, value);
                 });
             });
-            log.info("=====================================");
+            log.debug("=====================================");
         }
 
         return chain.filter(exchange).then(Mono.fromRunnable(() -> {
             long duration = System.currentTimeMillis() - startTime;
 
-            log.info("=== Response from AgentCore ===");
-            log.info("Status Code: {}", exchange.getResponse().getStatusCode());
-            log.info("Duration: {}ms", duration);
-            log.info("Response Headers:");
+            log.debug("=== Response from AgentCore ===");
+            log.debug("Status Code: {}", exchange.getResponse().getStatusCode());
+            log.debug("Duration: {}ms", duration);
+            log.debug("Response Headers:");
             exchange.getResponse().getHeaders().forEach((name, values) -> {
-                values.forEach(value -> log.info("  {}: {}", name, value));
+                values.forEach(value -> log.debug("  {}: {}", name, value));
             });
-            log.info("================================");
+            log.debug("================================");
         }));
     }
 

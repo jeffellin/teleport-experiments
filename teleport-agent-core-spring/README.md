@@ -1,31 +1,39 @@
-# Teleport to AgentCore Gateway: Identity-Preserving Authentication
+# Teleport to AgentCore Gateway: Identity-Preserving JWT Transformation
 
 ## Overview
 
-This document describes an architecture pattern for integrating **Teleport** identity with **AWS Bedrock AgentCore Gateway**, using **Spring Cloud Gateway** as an identity translation layer. The approach preserves user identity end-to-end, enabling audit trails and per-user authorization when invoking AI agent tools.
+A **production-ready** Spring Cloud Gateway that acts as a JWT transformation proxy between **Teleport** and **AWS Bedrock AgentCore Gateway**. This gateway enables secure, identity-preserving access to AgentCore by translating Teleport JWTs into AgentCore-trusted tokens while maintaining full user context and audit trails.
+
+**Status**: ✅ **Working and Deployed**
 
 ## Problem Statement
 
-AgentCore Gateway requires OAuth 2.0 Bearer tokens from a trusted issuer. Teleport provides strong identity through its own JWT tokens, but AgentCore cannot be configured to trust Teleport directly as an OAuth provider. We need a way to:
+AgentCore Gateway requires OAuth 2.0 Bearer tokens from a trusted issuer for authentication. Teleport provides strong identity through its own JWT tokens, but AgentCore cannot be configured to trust Teleport directly. This gateway solves that problem by:
 
-1. Authenticate users via Teleport (SSO, MFA, short-lived credentials)
-2. Translate Teleport identity into tokens AgentCore trusts
-3. Preserve user identity (`user_name`) through to tool execution
-4. Maintain audit trails showing which user invoked which tools
+1. ✅ Authenticating users via Teleport (SSO, MFA, short-lived credentials)
+2. ✅ Extracting user identity and roles from Teleport JWTs
+3. ✅ Minting new JWTs signed by the gateway that AgentCore trusts
+4. ✅ Preserving user identity (`username`, `sub`) through to tool execution
+5. ✅ Maintaining comprehensive audit trails showing which user invoked which tools
 
 ## Architecture
 
+*[View full diagram](https://jeffellin.github.io/teleport-experiments//teleport-agent-core-spring/identity-flow-diagram.html)*
 
-*[View full diagram]( https://jeffellin.github.io/teleport-experiments//teleport-agent-core-spring/identity-flow-diagram.html)*
+### Component Flow
 
-### Component Responsibilities
-
-| Component | Role |
-|-----------|------|
-| **Teleport Auth** | Authenticates users via SSO/MFA, issues short-lived JWTs |
-| **Teleport Proxy** | Runs in AWS, forwards requests with JWT in Authorization header |
-| **Spring Cloud Gateway** | Validates Teleport JWT, mints new JWT for AgentCore |
-| **AgentCore Gateway** | Validates Spring JWT, executes MCP tools with user context |
+```
+┌──────────┐       ┌─────────────┐       ┌────────────┐       ┌─────────────┐
+│          │       │  Teleport   │       │   Spring   │       │  AgentCore  │
+│  Client  │──────►│     App     │──────►│   Cloud    │──────►│   Gateway   │
+│          │ mTLS  │   Service   │  JWT  │  Gateway   │  JWT  │             │
+└──────────┘       └─────────────┘       └────────────┘       └─────────────┘
+                         │                      │                     │
+                         │                      │                     │
+                    Adds JWT in            Validates JWT         Validates JWT
+                 X-Teleport-Jwt-         Mints new JWT         using JWKS from
+                  Assertion header       Signed by Gateway      gateway issuer
+```
 
 ### Trust Chain
 
@@ -33,11 +41,13 @@ AgentCore Gateway requires OAuth 2.0 Bearer tokens from a trusted issuer. Telepo
 ┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
 │  Teleport Auth  │         │ Spring Gateway  │         │    AgentCore    │
 │                 │         │                 │         │                 │
-│  JWKS: /jwks    │◄────────│  Fetches JWKS   │         │                 │
-│                 │         │  to validate    │         │                 │
+│  JWKS:          │◄────────│  Fetches JWKS   │         │                 │
+│  /webapi/jwks   │         │  to validate    │         │                 │
+│                 │         │  Teleport JWT   │         │                 │
 │                 │         │                 │         │                 │
 │                 │         │  JWKS: /.well-  │────────►│  Fetches JWKS   │
 │                 │         │  known/jwks.json│         │  to validate    │
+│                 │         │  Mints JWTs     │         │  Gateway JWT    │
 └─────────────────┘         └─────────────────┘         └─────────────────┘
 ```
 
@@ -47,27 +57,35 @@ AgentCore Gateway requires OAuth 2.0 Bearer tokens from a trusted issuer. Telepo
 
 ```xml
 <dependencies>
-    <!-- Spring Cloud Gateway -->
+    <!-- Spring Cloud Gateway (Reactive) -->
     <dependency>
         <groupId>org.springframework.cloud</groupId>
         <artifactId>spring-cloud-starter-gateway</artifactId>
     </dependency>
-    
-    <!-- OAuth2 Authorization Server (for minting JWTs) -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-oauth2-authorization-server</artifactId>
-    </dependency>
-    
+
     <!-- OAuth2 Resource Server (for validating Teleport JWTs) -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
     </dependency>
+
+    <!-- Nimbus JOSE JWT (for minting and signing JWTs) -->
+    <dependency>
+        <groupId>com.nimbusds</groupId>
+        <artifactId>nimbus-jose-jwt</artifactId>
+    </dependency>
+
+    <!-- Spring Boot Actuator (health checks) -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
 </dependencies>
 ```
 
 ### Configuration
+
+See [AGENTCORE.md](notes/AGENTCORE.md) and [TELEPORT.md](notes/TELEPORT.md) for detailed configuration.
 
 ```yaml
 server:
@@ -77,185 +95,145 @@ spring:
   cloud:
     gateway:
       routes:
-        - id: agentcore
-          uri: https://gateway.bedrock-agentcore.us-east-1.amazonaws.com
+        # AgentCore ping endpoint
+        - id: agentcore-ping
+          uri: ${agentcore.endpoint}
+          predicates:
+            - Path=/ping
+
+        # AgentCore invocations endpoint
+        - id: agentcore-invocations
+          uri: ${agentcore.endpoint}
+          predicates:
+            - Path=/invocations
+
+        # AgentCore WebSocket endpoint
+        - id: agentcore-websocket
+          uri: ${agentcore.endpoint.ws}
+          predicates:
+            - Path=/ws/**
+
+        # AgentCore MCP endpoint
+        - id: agentcore-mcp
+          uri: ${agentcore.endpoint.mcp}
           predicates:
             - Path=/mcp/**
 
+# Teleport configuration
 teleport:
-  jwks-uri: https://teleport.example.com/webapi/jwks
+  jwks-uri: https://ellinj.teleport.sh/.well-known/jwks.json
+  validation:
+    enabled: false  # Set to true in production
 
+# AgentCore configuration
 agentcore:
-  issuer: https://your-gateway.example.com
+  endpoint: https://your-agentcore.gateway.bedrock-agentcore.us-east-2.amazonaws.com
+  endpoint.ws: wss://your-agentcore.gateway.bedrock-agentcore.us-east-2.amazonaws.com
+  endpoint.mcp: https://your-agentcore.gateway.bedrock-agentcore.us-east-2.amazonaws.com
+  issuer: https://agentid.ellin.net
   audience: agentcore-gateway
 ```
 
-### Token Minting Service
+### Key Components
 
-The `AgentCoreTokenMinter` creates JWTs signed with your private key, preserving the user identity from Teleport:
+#### 1. TeleportToAgentCoreTokenFilter
 
-```java
-@Service
-public class AgentCoreTokenMinter {
-
-    private final JwtEncoder jwtEncoder;
-
-    public AgentCoreTokenMinter(JWKSource<SecurityContext> jwkSource) {
-        this.jwtEncoder = new NimbusJwtEncoder(jwkSource);
-    }
-
-    public String mintToken(String teleportUsername, Map<String, Object> additionalClaims) {
-        Instant now = Instant.now();
-        
-        JwtClaimsSet claims = JwtClaimsSet.builder()
-            .issuer("https://your-gateway.example.com")
-            .issuedAt(now)
-            .expiresAt(now.plus(1, ChronoUnit.HOURS))
-            .subject(teleportUsername)                          // Identity preserved
-            .audience(List.of("agentcore-gateway"))
-            .claim("scope", "mcp:invoke mcp:tools")
-            .claim("username", teleportUsername)                // Explicit claim
-            .claim("auth_source", "teleport")                   // Provenance
-            .claims(c -> c.putAll(additionalClaims))
-            .build();
-
-        JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).build();
-        
-        return jwtEncoder.encode(JwtEncoderParameters.from(header, claims))
-            .getTokenValue();
-    }
-}
-```
-
-### Gateway Filter
-
-The filter intercepts requests, validates the Teleport JWT, and swaps it for a newly minted token:
+Validates Teleport JWTs and mints new AgentCore JWTs:
 
 ```java
 @Component
 public class TeleportToAgentCoreTokenFilter implements GlobalFilter, Ordered {
 
-    private final AgentCoreTokenMinter tokenMinter;
-    private final NimbusJwtDecoder teleportJwtDecoder;
-
-    public TeleportToAgentCoreTokenFilter(
-            AgentCoreTokenMinter tokenMinter,
-            @Value("${teleport.jwks-uri}") String teleportJwksUri) {
-        this.tokenMinter = tokenMinter;
-        this.teleportJwtDecoder = NimbusJwtDecoder.withJwkSetUri(teleportJwksUri).build();
-    }
-
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String authHeader = exchange.getRequest()
-            .getHeaders()
-            .getFirst(HttpHeaders.AUTHORIZATION);
-
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return chain.filter(exchange);
+        // Check for Teleport JWT (ingress controllers lowercase headers)
+        String token = exchange.getRequest().getHeaders().getFirst("X-Teleport-Jwt-Assertion");
+        if (token == null) {
+            token = exchange.getRequest().getHeaders().getFirst("teleport-jwt-assertion");
         }
 
-        String teleportToken = authHeader.substring(7);
+        if (token == null) {
+            return chain.filter(exchange);  // Pass through if no JWT
+        }
 
         return Mono.fromCallable(() -> {
-                // Validate Teleport JWT
-                Jwt teleportJwt = teleportJwtDecoder.decode(teleportToken);
-                
-                // Extract user_name claim
-                String username = teleportJwt.getClaimAsString("user_name");
-                if (username == null) {
-                    throw new IllegalArgumentException("Missing user_name claim");
-                }
+                    // Decode Teleport JWT
+                    Jwt teleportJwt = jwtDecoder.decode(token);
 
-                // Carry forward additional claims
-                Map<String, Object> additionalClaims = new HashMap<>();
-                if (teleportJwt.getClaimAsStringList("roles") != null) {
-                    additionalClaims.put("teleport_roles", 
-                        teleportJwt.getClaimAsStringList("roles"));
-                }
+                    // Extract username (Teleport uses 'username', not 'user_name')
+                    String username = teleportJwt.getClaimAsString("username");
 
-                // Mint new token
-                return tokenMinter.mintToken(username, additionalClaims);
-            })
-            .subscribeOn(Schedulers.boundedElastic())
-            .flatMap(agentCoreToken -> {
-                ServerHttpRequest mutatedRequest = exchange.getRequest()
-                    .mutate()
-                    .headers(h -> h.setBearerAuth(agentCoreToken))
-                    .build();
-                
-                return chain.filter(exchange.mutate().request(mutatedRequest).build());
-            })
-            .onErrorResume(e -> {
-                exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-                return exchange.getResponse().setComplete();
-            });
+                    // Preserve Teleport roles
+                    Map<String, Object> additionalClaims = new HashMap<>();
+                    if (teleportJwt.getClaimAsStringList("roles") != null) {
+                        additionalClaims.put("teleport_roles",
+                            teleportJwt.getClaimAsStringList("roles"));
+                    }
+
+                    // Mint new token
+                    return tokenMinter.mintToken(username, additionalClaims);
+                })
+                .flatMap(agentCoreToken -> {
+                    // Replace Teleport JWT with AgentCore JWT
+                    ServerHttpRequest mutatedRequest = exchange.getRequest()
+                            .mutate()
+                            .headers(h -> {
+                                h.remove("X-Teleport-Jwt-Assertion");
+                                h.remove("teleport-jwt-assertion");
+                                h.set("Authorization", "Bearer " + agentCoreToken);
+                            })
+                            .build();
+
+                    return chain.filter(exchange.mutate().request(mutatedRequest).build());
+                });
     }
 
     @Override
     public int getOrder() {
-        return -10;
+        return -10;  // Run early in filter chain
     }
 }
 ```
 
-### Authorization Server Configuration
+#### 2. AgentCoreTokenMinter
 
-Configure Spring Authorization Server to expose JWKS for AgentCore to validate tokens:
+Mints JWTs signed with the gateway's private key:
 
 ```java
-@Configuration
-public class AuthServerConfig {
+@Service
+public class AgentCoreTokenMinter {
 
-    @Bean
-    public JWKSource<SecurityContext> jwkSource() {
-        KeyPair keyPair = generateRsaKey();
-        RSAPublicKey publicKey = (RSAPublicKey) keyPair.getPublic();
-        RSAPrivateKey privateKey = (RSAPrivateKey) keyPair.getPrivate();
-        
-        RSAKey rsaKey = new RSAKey.Builder(publicKey)
-            .privateKey(privateKey)
-            .keyID(UUID.randomUUID().toString())
+    public String mintToken(String teleportUsername, Map<String, Object> additionalClaims) {
+        Instant now = Instant.now();
+
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+            .issuer(issuer)                              // https://agentid.ellin.net
+            .issuedAt(now)
+            .expiresAt(now.plus(1, ChronoUnit.HOURS))
+            .subject(teleportUsername)                   // Identity preserved
+            .audience(List.of(audience))                 // agentcore-gateway
+            .claim("scope", "mcp:invoke mcp:tools")      // Permissions
+            .claim("username", teleportUsername)         // Explicit username
+            .claim("user_name", teleportUsername)        // Alternative format
+            .claim("auth_source", "teleport")            // Provenance
+            .claims(c -> c.putAll(additionalClaims))     // Teleport roles
             .build();
-        
-        JWKSet jwkSet = new JWKSet(rsaKey);
-        return new ImmutableJWKSet<>(jwkSet);
-    }
 
-    @Bean
-    public AuthorizationServerSettings authorizationServerSettings() {
-        return AuthorizationServerSettings.builder()
-            .issuer("https://your-gateway.example.com")
-            .build();
-    }
-
-    private static KeyPair generateRsaKey() {
-        try {
-            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-            keyPairGenerator.initialize(2048);
-            return keyPairGenerator.generateKeyPair();
-        } catch (Exception ex) {
-            throw new IllegalStateException(ex);
-        }
+        return jwtEncoder.encode(JwtEncoderParameters.from(
+            JwsHeader.with(SignatureAlgorithm.RS256).build(),
+            claims
+        )).getTokenValue();
     }
 }
 ```
 
-### Configure AgentCore to Trust Your Gateway
+#### 3. Logging Filters
 
-When creating the AgentCore Gateway, specify your Spring Gateway as the trusted OAuth provider:
+Three logging filters provide complete visibility:
 
-```bash
-aws bedrock-agentcore create-gateway \
-  --name my-gateway \
-  --authorization-configuration '{
-    "oauth2ProviderConfiguration": {
-      "issuerUrl": "https://your-gateway.example.com",
-      "allowedClients": ["mcp-client"],
-      "allowedAudiences": ["agentcore-gateway"]
-    }
-  }'
-```
+- **RequestResponseLoggingFilter** (order -5): Logs client → gateway requests/responses
+- **AgentCoreLoggingFilter** (order 10002): Logs gateway → AgentCore requests/responses
+- **HostHeaderFilter** (order 10001): Updates Host header to match backend
 
 ## Token Flow
 
@@ -263,11 +241,12 @@ aws bedrock-agentcore create-gateway \
 
 ```json
 {
-  "iss": "teleport.example.com",
-  "sub": "jeff@example.com",
-  "user_name": "jeff",
-  "roles": ["developer", "mcp-user"],
-  "exp": 1735142400
+  "iss": "https://ellinj.teleport.sh",
+  "sub": "jeffrey.ellin@goteleport.com",
+  "username": "jeffrey.ellin@goteleport.com",
+  "roles": ["admin", "access", "editor", "mcp-user"],
+  "exp": 1735142400,
+  "iat": 1735138800
 }
 ```
 
@@ -275,74 +254,134 @@ aws bedrock-agentcore create-gateway \
 
 ```json
 {
-  "iss": "your-gateway.example.com",
-  "sub": "jeff",
-  "username": "jeff",
+  "iss": "https://agentid.ellin.net",
+  "sub": "jeffrey.ellin@goteleport.com",
   "aud": ["agentcore-gateway"],
+  "username": "jeffrey.ellin@goteleport.com",
+  "user_name": "jeffrey.ellin@goteleport.com",
   "scope": "mcp:invoke mcp:tools",
   "auth_source": "teleport",
-  "teleport_roles": ["developer", "mcp-user"],
-  "exp": 1735146000
+  "teleport_roles": ["admin", "access", "editor", "mcp-user"],
+  "exp": 1735146000,
+  "iat": 1735142400
 }
 ```
 
 ## Identity Preservation
 
-The key insight is that the `user_name` claim from Teleport becomes the `sub` (subject) claim in the minted token. This means:
-
-1. **Audit Logs**: AgentCore logs show "jeff" made the request, not a service account
-2. **Per-User Authorization**: MCP tools can check the `username` claim for fine-grained access control
-3. **Provenance**: The `auth_source` claim indicates the original identity provider
-4. **Role Propagation**: Teleport roles can inform tool-level authorization decisions
+The `username` claim from Teleport flows through to AgentCore:
 
 ```
 Teleport JWT              Gateway JWT              AgentCore
 ─────────────────────────────────────────────────────────────
-user_name: "jeff"    →    sub: "jeff"         →   Logged as "jeff"
+username: "jeff"     →    sub: "jeff"         →   Logged as "jeff"
                           username: "jeff"    →   Available to tools
-roles: [...]         →    teleport_roles: [...] → Authorization decisions
+                          user_name: "jeff"   →   Compatibility
+roles: [...]         →    teleport_roles: [...] → Authorization
 ```
 
-## Endpoints Exposed by Spring Gateway
+**Benefits:**
+1. ✅ **Audit Logs**: AgentCore logs show actual user, not service account
+2. ✅ **Per-User Authorization**: MCP tools can check username for access control
+3. ✅ **Provenance Tracking**: `auth_source` indicates original IdP
+4. ✅ **Role Propagation**: Teleport roles inform tool-level decisions
+
+## Endpoints
 
 | Endpoint | Purpose |
 |----------|---------|
-| `/.well-known/openid-configuration` | OIDC Discovery (AgentCore fetches this) |
-| `/.well-known/jwks.json` | JWKS endpoint (AgentCore validates tokens) |
-| `/mcp/**` | Proxied to AgentCore Gateway |
+| `/.well-known/openid-configuration` | OIDC Discovery for JWT validation |
+| `/.well-known/jwks.json` | Public keys for JWT signature validation |
+| `/actuator/health` | Health check endpoint |
+| `/test/echo` | Test endpoint showing JWT details |
+| `/ping` | Proxied to AgentCore (health check) |
+| `/invocations` | Proxied to AgentCore (agent interactions) |
+| `/ws/**` | Proxied to AgentCore (WebSocket streaming) |
+| `/mcp/**` | Proxied to AgentCore (MCP protocol) |
+
+## Deployment
+
+### Local Development
+
+```bash
+# Run Spring Gateway locally
+./mvnw spring-boot:run
+
+# Start Teleport app service (proxies to localhost:8082)
+./start-with-teleport.sh <your-token>
+
+# Test
+curl \
+  --cert ~/.tsh/keys/.../agentid.crt \
+  --key ~/.tsh/keys/.../agentid.key \
+  https://agentid.ellinj.teleport.sh/test/echo
+```
+
+### Kubernetes Deployment
+
+See [k8s/README.md](k8s/README.md) for details.
+
+```bash
+# Build and push Docker image
+make docker-build-x86
+docker tag spring-gateway:latest ellinj/spring-agent-gateway:latest
+docker push ellinj/spring-agent-gateway:latest
+
+# Deploy to Kubernetes
+kubectl apply -f k8s/
+
+# Check status
+kubectl get pods -l app=spring-gateway
+kubectl logs -l app=spring-gateway -f
+```
 
 ## Security Considerations
 
-1. **Short-Lived Tokens**: Both Teleport and minted tokens should have short expiration times
-2. **Key Rotation**: Implement key rotation for your signing keys
-3. **HTTPS Only**: All communication should be over TLS
-4. **Audience Validation**: AgentCore validates the `aud` claim matches expected value
-5. **Clock Skew**: Allow for reasonable clock skew in token validation
+1. ✅ **Short-Lived Tokens**: Minted JWTs expire in 1 hour
+2. ✅ **Signature Validation**: Both Teleport and gateway JWTs are validated
+3. ✅ **HTTPS Only**: All communication over TLS (enforced by ingress)
+4. ✅ **Audience Validation**: AgentCore validates `aud` claim
+5. ⚠️ **Key Rotation**: Implement periodic key rotation for production
+6. ⚠️ **Shared Keys**: Use k8s secrets for multi-pod deployments
 
 ## Testing
 
 ### Verify JWKS Endpoint
 
 ```bash
-curl https://your-gateway.example.com/.well-known/jwks.json
+curl https://agentid.ellin.net/.well-known/jwks.json | jq .
 ```
 
-### Test Token Flow
+### Verify OIDC Configuration
 
 ```bash
-# Get Teleport JWT
-tsh login
-export TELEPORT_TOKEN=$(tsh credentials show --format=json | jq -r '.jwt')
-
-# Call through gateway
-curl -H "Authorization: Bearer $TELEPORT_TOKEN" \
-  https://your-gateway.example.com/mcp/tools/list
+curl https://agentid.ellin.net/.well-known/openid-configuration | jq .
 ```
+
+### Test JWT Flow
+
+```bash
+# Login to Teleport
+tsh app login agentid
+
+# Test echo endpoint (shows JWT transformation)
+curl \
+  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key \
+  https://agentid.ellinj.teleport.sh/test/echo | jq .
+```
+
+## Documentation
+
+- [AGENTCORE.md](notes/AGENTCORE.md) - AgentCore configuration details
+- [TELEPORT.md](notes/TELEPORT.md) - Teleport setup and configuration
+- [BUILD.md](notes/BUILD.md) - Docker build and deployment
+- [k8s/README.md](k8s/README.md) - Kubernetes deployment
 
 ## References
 
-- [AWS Bedrock AgentCore Gateway Documentation](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway.html)
-- [Teleport Workload Identity](https://goteleport.com/docs/machine-id/workload-identity/)
+- [AWS Bedrock AgentCore Gateway Documentation](https://docs.aws.amazon.com/bedrock/)
+- [Teleport Application Access](https://goteleport.com/docs/application-access/introduction/)
 - [Spring Cloud Gateway](https://spring.io/projects/spring-cloud-gateway)
-- [Spring Authorization Server](https://spring.io/projects/spring-authorization-server)
 - [MCP Specification](https://modelcontextprotocol.io/)
+- [RFC 7519 - JWT](https://tools.ietf.org/html/rfc7519)

@@ -3,6 +3,8 @@ package com.ellin.agentcore.springgateway.filter;
 import com.ellin.agentcore.springgateway.service.AgentCoreTokenMinter;
 import com.nimbusds.jwt.JWT;
 import com.nimbusds.jwt.JWTParser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -25,6 +27,8 @@ import java.util.Map;
 @Component
 public class TeleportToAgentCoreTokenFilter implements GlobalFilter, Ordered {
 
+    private static final Logger log = LoggerFactory.getLogger(TeleportToAgentCoreTokenFilter.class);
+
     private final AgentCoreTokenMinter tokenMinter;
     private final JwtDecoder jwtDecoder;
     private final boolean validationEnabled;
@@ -36,17 +40,17 @@ public class TeleportToAgentCoreTokenFilter implements GlobalFilter, Ordered {
         this.tokenMinter = tokenMinter;
         this.validationEnabled = validationEnabled;
 
-        System.out.println("=== TeleportToAgentCoreTokenFilter Initializing ===");
-        System.out.println("Validation enabled: " + validationEnabled);
-        System.out.println("JWKS URI: " + teleportJwksUri);
+        log.info("TeleportToAgentCoreTokenFilter initializing");
+        log.info("Validation enabled: {}", validationEnabled);
+        log.info("JWKS URI: {}", teleportJwksUri);
 
         if (validationEnabled) {
             // Validate signature and expiration
-            System.out.println("Creating validating JWT decoder");
+            log.info("Creating validating JWT decoder");
             this.jwtDecoder = NimbusJwtDecoder.withJwkSetUri(teleportJwksUri).build();
         } else {
             // Decode without validation - use custom decoder
-            System.out.println("Creating non-validating JWT decoder");
+            log.info("Creating non-validating JWT decoder");
             this.jwtDecoder = token -> {
                 try {
                     JWT jwt = JWTParser.parse(token);
@@ -64,13 +68,13 @@ public class TeleportToAgentCoreTokenFilter implements GlobalFilter, Ordered {
                 }
             };
         }
-        System.out.println("=== TeleportToAgentCoreTokenFilter Initialized Successfully ===");
+        log.info("TeleportToAgentCoreTokenFilter initialized successfully");
     }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        System.out.println("=== TeleportToAgentCoreTokenFilter.filter() called ===");
-        System.out.println("Request path: " + exchange.getRequest().getPath());
+        log.debug("TeleportToAgentCoreTokenFilter.filter() called");
+        log.debug("Request path: {}", exchange.getRequest().getPath());
 
         // Try Teleport-specific header first (used with mTLS)
         // Note: Ingress controllers may lowercase headers, so check both variants
@@ -85,40 +89,40 @@ public class TeleportToAgentCoreTokenFilter implements GlobalFilter, Ordered {
         }
 
         if (token != null) {
-            System.out.println("Found JWT in Teleport-Jwt-Assertion header");
+            log.debug("Found JWT in Teleport-Jwt-Assertion header");
         } else {
             // Fall back to standard Authorization header
             String authHeader = exchange.getRequest()
                     .getHeaders()
                     .getFirst(HttpHeaders.AUTHORIZATION);
 
-            System.out.println("Authorization header: " + (authHeader != null ? "present" : "missing"));
+            log.debug("Authorization header: {}", authHeader != null ? "present" : "missing");
 
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 token = authHeader.substring(7);
-                System.out.println("Found JWT in Authorization: Bearer header");
+                log.debug("Found JWT in Authorization: Bearer header");
             }
         }
 
         if (token == null) {
-            System.out.println("No JWT found in X-Teleport-Jwt-Assertion or Authorization headers, passing through without modification");
+            log.debug("No JWT found in X-Teleport-Jwt-Assertion or Authorization headers, passing through without modification");
             return chain.filter(exchange);
         }
 
         final String teleportToken = token;
-        System.out.println("Processing JWT token...");
+        log.debug("Processing JWT token...");
 
         return Mono.fromCallable(() -> {
                     // Decode Teleport JWT (validates only if validation enabled)
-                    System.out.println("Decoding Teleport JWT...");
+                    log.debug("Decoding Teleport JWT...");
                     Jwt teleportJwt = jwtDecoder.decode(teleportToken);
-                    System.out.println("JWT decoded successfully. Claims: " + teleportJwt.getClaims().keySet());
+                    log.debug("JWT decoded successfully. Claims: {}", teleportJwt.getClaims().keySet());
 
                     // Extract username claim (Teleport uses 'username', not 'user_name')
                     String username = teleportJwt.getClaimAsString("username");
-                    System.out.println("Extracted username: " + username);
+                    log.debug("Extracted username: {}", username);
                     if (username == null) {
-                        System.err.println("!!! Missing username claim in JWT. Available claims: " + teleportJwt.getClaims().keySet());
+                        log.error("Missing username claim in JWT. Available claims: {}", teleportJwt.getClaims().keySet());
                         throw new IllegalArgumentException("Missing username claim");
                     }
 
@@ -130,15 +134,15 @@ public class TeleportToAgentCoreTokenFilter implements GlobalFilter, Ordered {
                     }
 
                     // Mint new token
-                    System.out.println("Minting new AgentCore token for user: " + username);
+                    log.debug("Minting new AgentCore token for user: {}", username);
                     String newToken = tokenMinter.mintToken(username, additionalClaims);
-                    System.out.println("Successfully minted new token");
+                    log.debug("Successfully minted new token");
                     return newToken;
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(agentCoreToken -> {
-                    System.out.println("Setting Authorization header with new AgentCore token");
-                    System.out.println("NEW AGENTCORE TOKEN: " + agentCoreToken);
+                    log.debug("Setting Authorization header with new AgentCore token");
+                    log.debug("New AgentCore token: {}", agentCoreToken);
 
                     ServerHttpRequest mutatedRequest = exchange.getRequest()
                             .mutate()
@@ -150,16 +154,15 @@ public class TeleportToAgentCoreTokenFilter implements GlobalFilter, Ordered {
                                 h.remove("Authorization");
                                 // Set the new AgentCore JWT
                                 h.set("Authorization", "Bearer " + agentCoreToken);
-                                System.out.println("Authorization header set successfully");
+                                log.debug("Authorization header set successfully");
                             })
                             .build();
 
                     return chain.filter(exchange.mutate().request(mutatedRequest).build());
                 })
                 .onErrorResume(e -> {
-                    System.err.println("!!! ERROR in TeleportToAgentCoreTokenFilter: " + e.getClass().getName());
-                    System.err.println("!!! Error message: " + e.getMessage());
-                    e.printStackTrace();
+                    log.error("Error in TeleportToAgentCoreTokenFilter: {}", e.getClass().getName());
+                    log.error("Error message: {}", e.getMessage(), e);
                     exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
                     return exchange.getResponse().setComplete();
                 });

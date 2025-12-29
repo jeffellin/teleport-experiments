@@ -20,28 +20,28 @@ public class RequestResponseLoggingFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
 
-        log.info("=== Incoming Request ===");
-        log.info("Method: {}", request.getMethod());
-        log.info("URI: {}", request.getURI());
-        log.info("Path: {}", request.getPath());
-        log.info("Headers:");
+        log.debug("=== Incoming Request ===");
+        log.debug("Method: {}", request.getMethod());
+        log.debug("URI: {}", request.getURI());
+        log.debug("Path: {}", request.getPath());
+        log.debug("Headers:");
         request.getHeaders().forEach((name, values) -> {
             values.forEach(value -> {
                 // Log all headers including full JWT tokens for verification
-                log.info("  {}: {}", name, value);
+                log.debug("  {}: {}", name, value);
             });
         });
 
         return chain.filter(exchange).then(Mono.fromRunnable(() -> {
             ServerHttpResponse response = exchange.getResponse();
 
-            log.info("=== Outgoing Response ===");
-            log.info("Status Code: {}", response.getStatusCode());
-            log.info("Response Headers:");
+            log.debug("=== Outgoing Response ===");
+            log.debug("Status Code: {}", response.getStatusCode());
+            log.debug("Response Headers:");
             response.getHeaders().forEach((name, values) -> {
-                values.forEach(value -> log.info("  {}: {}", name, value));
+                values.forEach(value -> log.debug("  {}: {}", name, value));
             });
-            log.info("========================");
+            log.debug("========================");
         }));
     }
 
