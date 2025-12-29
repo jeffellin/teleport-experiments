@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spring-gateway-config
+  namespace: default
+data:
+  # Teleport configuration
+  teleport.jwks-uri: "https://ellinj.teleport.sh/.well-known/jwks.json"
+  teleport.validation.enabled: "false"
+
+  # AgentCore configuration
+  agentcore.endpoint: "https://testgwforlambdaiam-ool6a9jhvm.gateway.bedrock-agentcore.us-east-2.amazonaws.com"
+  agentcore.endpoint.ws: "wss://gateway.bedrock-agentcore.us-east-1.amazonaws.com"
+  agentcore.endpoint.mcp: "hhttps://testgwforlambdaiam-ool6a9jhvm.gateway.bedrock-agentcore.us-east-2.amazonaws.com"
+  agentcore.issuer: "https://agentid.ellin.net"
+  agentcore.audience: "agentcore-gateway"
+
+  # Spring Boot configuration
+  server.port: "8080"
+  spring.application.name: "spring-gateway"
+
+  # Logging
+  logging.level.root: "INFO"
+  logging.level.com.ellin.agentcore.springgateway: "DEBUG"
+  logging.level.org.springframework.cloud.gateway: "DEBUG"
+  logging.level.org.springframework.security: "DEBUG"
+
+  # Actuator
+  management.endpoints.web.exposure.include: "health,info"
+  management.endpoint.health.show-details: "when-authorized"

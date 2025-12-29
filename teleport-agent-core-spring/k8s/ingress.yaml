@@ -1,0 +1,106 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spring-gateway
+  namespace: default
+  annotations:
+    # cert-manager will automatically create the certificate
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+
+    # Nginx ingress controller annotations (adjust for your ingress controller)
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: spring-gateway
+
+    # Increase timeouts for long-running requests
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+
+    # Body size limit
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - agentid.ellin.net
+    secretName: agentid-ellin-net-tls
+
+  rules:
+  - host: agentid.ellin.net
+    http:
+      paths:
+      # AgentCore ping endpoint (health check)
+      - path: /ping
+        pathType: Prefix
+        backend:
+          service:
+            name: spring-gateway
+            port:
+              number: 80
+
+      # AgentCore invocations endpoint
+      - path: /invocations
+        pathType: Prefix
+        backend:
+          service:
+            name: spring-gateway
+            port:
+              number: 80
+
+      # WebSocket endpoint
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: spring-gateway
+            port:
+              number: 80
+
+      # MCP endpoint
+      - path: /mcp
+        pathType: Prefix
+        backend:
+          service:
+            name: spring-gateway
+            port:
+              number: 80
+
+      # Well-known endpoints (JWKS, OIDC)
+      - path: /.well-known
+        pathType: Prefix
+        backend:
+          service:
+            name: spring-gateway
+            port:
+              number: 80
+
+      # Test endpoints
+      - path: /test
+        pathType: Prefix
+        backend:
+          service:
+            name: spring-gateway
+            port:
+              number: 80
+
+      # Actuator endpoints
+      - path: /actuator
+        pathType: Prefix
+        backend:
+          service:
+            name: spring-gateway
+            port:
+              number: 80
+
+      # Catch-all route
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: spring-gateway
+            port:
+              number: 80

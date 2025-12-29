@@ -1,0 +1,76 @@
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: spring-gateway
+  namespace: default
+spec:
+  virtualhost:
+    fqdn: agentid.ellin.net
+    tls:
+      secretName: agentid-ellin-net-tls  # TLS certificate secret (create separately)
+
+  routes:
+  # AgentCore ping endpoint
+  - conditions:
+    - prefix: /ping
+    services:
+    - name: spring-gateway
+      port: 80
+    timeoutPolicy:
+      response: 30s
+
+  # AgentCore invocations endpoint
+  - conditions:
+    - prefix: /invocations
+    services:
+    - name: spring-gateway
+      port: 80
+    timeoutPolicy:
+      response: 60s
+
+  # WebSocket endpoint
+  - conditions:
+    - prefix: /ws
+    services:
+    - name: spring-gateway
+      port: 80
+    enableWebsockets: true
+    timeoutPolicy:
+      response: 3600s  # 1 hour for WebSocket connections
+
+  # MCP endpoint
+  - conditions:
+    - prefix: /mcp
+    services:
+    - name: spring-gateway
+      port: 80
+    timeoutPolicy:
+      response: 30s
+
+  # Well-known endpoints (JWKS, OIDC discovery)
+  - conditions:
+    - prefix: /.well-known
+    services:
+    - name: spring-gateway
+      port: 80
+
+  # Test endpoints
+  - conditions:
+    - prefix: /test
+    services:
+    - name: spring-gateway
+      port: 80
+
+  # Actuator endpoints
+  - conditions:
+    - prefix: /actuator
+    services:
+    - name: spring-gateway
+      port: 80
+
+  # Catch-all route
+  - conditions:
+    - prefix: /
+    services:
+    - name: spring-gateway
+      port: 80

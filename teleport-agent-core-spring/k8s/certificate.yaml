@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: agentid-ellin-net
+  namespace: default
+spec:
+  secretName: agentid-ellin-net-tls
+  duration: 2160h # 90 days
+  renewBefore: 720h # 30 days before expiration
+  dnsNames:
+  - agentid.ellin.net
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+    group: cert-manager.io
