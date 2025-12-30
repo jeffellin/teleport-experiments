@@ -760,7 +760,6 @@ metadata:
 ## References
 
 - [Kubernetes Documentation](https://kubernetes.io/docs/home/)
-- [Contour Ingress Controller](https://projectcontour.io/)
 - [cert-manager](https://cert-manager.io/)
 - [Spring Boot on Kubernetes](https://spring.io/guides/gs/spring-boot-kubernetes/)
 - [TELEPORT.md](../notes/TELEPORT.md) - Teleport configuration
