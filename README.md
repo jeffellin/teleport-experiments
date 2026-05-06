@@ -1,6 +1,6 @@
 # Teleport Experiments
 
-This repo contains two related projects for working with AWS Bedrock AgentCore and Teleport.
+This repo contains projects for working with AWS Bedrock AgentCore and Teleport.
 
 ## Projects
 
@@ -13,3 +13,8 @@ This repo contains two related projects for working with AWS Bedrock AgentCore a
   - Spring Cloud Gateway that transforms Teleport JWTs into AgentCore-trusted JWTs.
   - Acts as a production-ready identity-preserving proxy in front of AgentCore Gateway.
   - See [teleport-agent-core-spring/README.md](teleport-agent-core-spring/README.md) for details.
+
+- `teleport-mcp-agent-core/`
+  - Three-notebook series showing how to MCP-ify AWS Lambda functions behind AgentCore Gateway, protected by Teleport as the OIDC identity provider.
+  - Demonstrates zero-trust identity propagation, REQUEST interceptor identity injection, and Cedar/AVP policy enforcement — all without modifying the tool Lambda.
+  - See [teleport-mcp-agent-core/README.md](teleport-mcp-agent-core/README.md) for details.
