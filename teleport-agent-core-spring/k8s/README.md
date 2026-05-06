@@ -323,8 +323,8 @@ tsh app login agentid
 
 # Test echo endpoint (shows JWT transformation)
 curl \
-  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
-  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key \
+  --cert ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.key \
   https://agentid.ellinj.teleport.sh/test/echo | jq .
 ```
 
@@ -333,7 +333,7 @@ Expected response showing JWT details:
 {
   "jwt_source": "Teleport-Jwt-Assertion",
   "jwt_token": "eyJ...",
-  "jwt_payload_decoded": "{\"username\":\"jeffrey.ellin@goteleport.com\",...}",
+  "jwt_payload_decoded": "{\"username\":\"none@nill.com\",...}",
   "path": "/test/echo",
   "method": "GET"
 }
@@ -369,8 +369,8 @@ Headers:
 === JWT Transformation ===
 JWT source: teleport-jwt-assertion
 Teleport JWT decoded successfully. Claims: [username, roles, sub, iss, exp, iat]
-Extracted username: jeffrey.ellin@goteleport.com
-Minted AgentCore JWT with username: jeffrey.ellin@goteleport.com
+Extracted username: none@nill.com
+Minted AgentCore JWT with username: none@nill.com
 
 === Outbound Request to AgentCore ===
 Method: POST
@@ -624,8 +624,8 @@ kubectl logs -l app=spring-gateway | grep -i "upgrade"
 # Test WebSocket connection
 tsh app login agentid
 wscat -c "wss://agentid.ellinj.teleport.sh/ws" \
-  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
-  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key
+  --cert ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.key
 
 # Contour automatically handles WebSocket upgrade, no special annotation needed
 ```

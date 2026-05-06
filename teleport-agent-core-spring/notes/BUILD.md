@@ -138,8 +138,8 @@ docker run -p 8082:8080 \
 # 4. Test
 tsh app login agentid
 curl \
-  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
-  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key \
+  --cert ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.key \
   https://agentid.ellinj.teleport.sh/test/echo
 ```
 

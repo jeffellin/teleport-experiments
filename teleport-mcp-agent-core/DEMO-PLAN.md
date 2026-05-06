@@ -22,7 +22,7 @@ Developer
 Teleport Proxy ──── issues JWT ────────────────────────────────────────────────────┐
   │  mcp+https://                                                                   │
   │  Authorization: Bearer <teleport-jwt>                                          │
-  │  sub: jeffrey.ellin@goteleport.com                                             │
+  │  sub: none@nill.com                                             │
   │  roles: [mcp-user, aws-personal-admin, ...]                                    │
   ↓                                                                                 │
 AgentCore Gateway                                                                   │
@@ -33,13 +33,13 @@ AgentCore Gateway                                                               
 REQUEST Interceptor Lambda  (passRequestHeaders: true)                             │
   │  1. Decode JWT from Authorization header (no re-verify, gateway already did)   │
   │  2. Call AVP IsAuthorized:                                                      │
-  │       principal:  TeleportUser::"jeffrey.ellin@goteleport.com"                 │
+  │       principal:  TeleportUser::"none@nill.com"                 │
   │       action:     Action::"invoke_tool"                                         │
   │       resource:   Tool::"get_order_tool"                                        │
   │       context:    { roles: ["mcp-user", ...] }                                  │
   │  3a. DENY  → return MCP error (tool Lambda never invoked)                      │
   │  3b. ALLOW → inject headers into forwarded request:                            │
-  │         X-Teleport-User:  jeffrey.ellin@goteleport.com                         │
+  │         X-Teleport-User:  none@nill.com                         │
   │         X-Teleport-Roles: mcp-user,aws-personal-admin                          │
   ↓                                                                                 │
 Tool Lambda                                                                         │

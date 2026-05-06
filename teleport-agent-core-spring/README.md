@@ -242,8 +242,8 @@ Three logging filters provide complete visibility:
 ```json
 {
   "iss": "https://ellinj.teleport.sh",
-  "sub": "jeffrey.ellin@goteleport.com",
-  "username": "jeffrey.ellin@goteleport.com",
+  "sub": "none@nill.com",
+  "username": "none@nill.com",
   "roles": ["admin", "access", "editor", "mcp-user"],
   "exp": 1735142400,
   "iat": 1735138800
@@ -255,10 +255,10 @@ Three logging filters provide complete visibility:
 ```json
 {
   "iss": "https://agentid.ellin.net",
-  "sub": "jeffrey.ellin@goteleport.com",
+  "sub": "none@nill.com",
   "aud": ["agentcore-gateway"],
-  "username": "jeffrey.ellin@goteleport.com",
-  "user_name": "jeffrey.ellin@goteleport.com",
+  "username": "none@nill.com",
+  "user_name": "none@nill.com",
   "scope": "mcp:invoke mcp:tools",
   "auth_source": "teleport",
   "teleport_roles": ["admin", "access", "editor", "mcp-user"],
@@ -366,8 +366,8 @@ tsh app login agentid
 
 # Test echo endpoint (shows JWT transformation)
 curl \
-  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
-  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key \
+  --cert ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.key \
   https://agentid.ellinj.teleport.sh/test/echo | jq .
 ```
 

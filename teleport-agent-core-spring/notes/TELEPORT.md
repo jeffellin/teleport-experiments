@@ -61,8 +61,8 @@ tsh app login agentid
 
 # Test the echo endpoint (shows JWT transformation)
 curl \
-  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
-  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key \
+  --cert ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.key \
   https://agentid.ellinj.teleport.sh/test/echo | jq .
 ```
 
@@ -169,8 +169,8 @@ tsh app login agentid
 
 # Test (shows both incoming Teleport JWT and outgoing gateway JWT)
 curl \
-  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
-  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key \
+  --cert ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.key \
   https://agentid.ellinj.teleport.sh/test/echo | jq .
 ```
 
@@ -179,7 +179,7 @@ Response shows:
 {
   "jwt_source": "Teleport-Jwt-Assertion",
   "jwt_token": "eyJ...",
-  "jwt_payload_decoded": "{\"username\":\"jeffrey.ellin@goteleport.com\",...}",
+  "jwt_payload_decoded": "{\"username\":\"none@nill.com\",...}",
   "path": "/test/echo",
   "method": "GET"
 }
@@ -189,8 +189,8 @@ Response shows:
 
 ```bash
 curl \
-  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
-  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key \
+  --cert ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.key \
   https://agentid.ellinj.teleport.sh/actuator/health
 ```
 

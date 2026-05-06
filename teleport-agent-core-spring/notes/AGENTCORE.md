@@ -103,8 +103,8 @@ Teleport sends JWTs in the `X-Teleport-Jwt-Assertion` header (or `teleport-jwt-a
 ```json
 {
   "iss": "https://ellinj.teleport.sh",
-  "sub": "jeffrey.ellin@goteleport.com",
-  "username": "jeffrey.ellin@goteleport.com",
+  "sub": "none@nill.com",
+  "username": "none@nill.com",
   "roles": ["admin", "access", "editor", "mcp-user"],
   "exp": 1735142400,
   "iat": 1735138800
@@ -120,10 +120,10 @@ The gateway mints new JWTs signed with its own key and sends them to AgentCore i
 ```json
 {
   "iss": "https://agentid.ellin.net",
-  "sub": "jeffrey.ellin@goteleport.com",
+  "sub": "none@nill.com",
   "aud": ["agentcore-gateway"],
-  "username": "jeffrey.ellin@goteleport.com",
-  "user_name": "jeffrey.ellin@goteleport.com",
+  "username": "none@nill.com",
+  "user_name": "none@nill.com",
   "scope": "mcp:invoke mcp:tools",
   "auth_source": "teleport",
   "teleport_roles": ["admin", "access", "editor", "mcp-user"],
@@ -198,8 +198,8 @@ tsh app login agentid
 
 ```bash
 curl \
-  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
-  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key \
+  --cert ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.key \
   https://agentid.ellinj.teleport.sh/ping
 ```
 
@@ -215,8 +215,8 @@ Expected response:
 
 ```bash
 curl -X POST \
-  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
-  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key \
+  --cert ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.key \
   -H "Content-Type: application/json" \
   -d '{"action":"invoke","parameters":{"message":"Hello"}}' \
   https://agentid.ellinj.teleport.sh/invocations | jq .
@@ -226,8 +226,8 @@ curl -X POST \
 
 ```bash
 curl \
-  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
-  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key \
+  --cert ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.key \
   https://agentid.ellinj.teleport.sh/mcp/tools | jq .
 ```
 
@@ -237,8 +237,8 @@ curl \
 # Using wscat (npm install -g wscat)
 tsh app login agentid
 wscat -c "wss://agentid.ellinj.teleport.sh/ws" \
-  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
-  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key
+  --cert ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.key
 ```
 
 ### Verify JWT Transformation
@@ -247,8 +247,8 @@ The `/test/echo` endpoint shows the JWT transformation process:
 
 ```bash
 curl \
-  --cert ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.crt \
-  --key ~/.tsh/keys/ellinj.teleport.sh/jeffrey.ellin@goteleport.com-app/ellinj.teleport.sh/agentid.key \
+  --cert ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.crt \
+  --key ~/.tsh/keys/ellinj.teleport.sh/none@nill.com-app/ellinj.teleport.sh/agentid.key \
   https://agentid.ellinj.teleport.sh/test/echo | jq .
 ```
 
@@ -357,9 +357,9 @@ Headers:
 === JWT Transformation ===
 JWT source: teleport-jwt-assertion
 Teleport JWT decoded successfully. Claims: [username, roles, sub, iss, exp, iat]
-Extracted username: jeffrey.ellin@goteleport.com
+Extracted username: none@nill.com
 Extracted roles: [admin, access, editor, mcp-user]
-Minted AgentCore JWT with username: jeffrey.ellin@goteleport.com
+Minted AgentCore JWT with username: none@nill.com
 
 === Outbound Request to AgentCore ===
 Method: POST
