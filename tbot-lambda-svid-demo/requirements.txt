@@ -1,0 +1,16 @@
+# Python packages for demo-walkthrough.ipynb.
+#
+#   python3 -m venv .venv
+#   .venv/bin/pip install -r requirements.txt
+#
+# Everything else the notebook imports is standard library. The go, make,
+# terraform, aws, tsh, and tctl CLIs are system binaries invoked through
+# subprocess -- they are prerequisites, not pip installs. See the README.
+
+ipykernel>=6.29     # the kernel PyCharm and Jupyter run the notebook on
+nbconvert>=7.16     # Step 13, exporting the executed notebook to HTML
+
+# Only needed to run the notebook outside an IDE (`jupyter lab`):
+# jupyterlab>=4.1
+
+# Verified with ipykernel 7.3.0, nbconvert 7.17.1 on Python 3.14.

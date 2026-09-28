@@ -1,0 +1,13 @@
+aws_region          = "us-east-1"
+teleport_proxy_addr = "example.teleport.sh:443"
+name                = "tbot-svid-demo"
+lambda_architecture = "arm64"
+
+# Database (see ../database). Leave db_host empty to demo SVID issuance only.
+db_host               = "pg.example.internal"
+db_sslmode            = "verify-full"
+db_server_ca_pem_file = "../database/certs/server-ca.pem"
+
+# Only if the DB is in a private VPC (subnets need NAT to reach Teleport):
+# subnet_ids         = ["subnet-aaa", "subnet-bbb"]
+# security_group_ids = ["sg-123"]

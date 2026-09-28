@@ -1,0 +1,31 @@
+# Project-scoped ignores. The repo root already covers .env, .venv/,
+# __pycache__/, .ipynb_checkpoints/, .idea/, .vscode/, and .DS_Store.
+
+# --- Terraform ---------------------------------------------------------------
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+# Both forms: `-out=tfplan` produces a file with no extension.
+tfplan
+*.tfplan
+# Real values; the .example is committed.
+terraform.tfvars
+!terraform.tfvars.example
+
+# --- Generated secrets and certificates --------------------------------------
+# terraform/db writes the SSH key here; database/setup.sh writes the Postgres
+# certs, including a server private key.
+*.pem
+*.key
+database/certs/
+
+# --- Build artifacts ---------------------------------------------------------
+# `make` output: the tbot layer and function zips.
+build/
+
+# --- Notebook ----------------------------------------------------------------
+demo-walkthrough-executed-*.html
