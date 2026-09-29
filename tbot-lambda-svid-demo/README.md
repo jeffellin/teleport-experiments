@@ -30,6 +30,7 @@ sequenceDiagram
 | Path | What it is |
 |---|---|
 | `demo-walkthrough.ipynb` | The whole demo as ordered, idempotent notebook cells. **Start here.** |
+| `RUNBOOK.md` | The same sequence as shell commands, for CI or a terminal-only demo |
 | `cmd/tbot-extension` | Lambda **external extension**: registers with the Extensions API, writes a tbot config, runs `tbot`, blocks INIT until tbot reports ready, restarts it if it crashes, stops it on SHUTDOWN |
 | `cmd/handler` | The function: fetches an SVID with `go-spiffe`, connects to Postgres with `pgx` using the SVID, runs queries, returns JSON |
 | `terraform/` | Lambda + layer + IAM role, and Teleport `workload_identity`, `role`, `bot`, IAM `provision_token` |
@@ -67,6 +68,14 @@ This is deliberate, and it's the thing most likely to trip you up if you change 
 Postgres is therefore reachable on 5432 from anywhere, which is safe here because `pg_hba.conf` exposes exactly one remotely reachable line — `hostssl demo lambda_svid_demo … cert` — and the role has no password. Without a Teleport-issued client certificate there is no credential to attack.
 
 If you do want the database private, add a NAT gateway and set `subnet_ids` / `security_group_ids`. Those subnets must route `0.0.0.0/0` to the NAT, not to an internet gateway.
+
+## Two ways to run it
+
+**Notebook** — `demo-walkthrough.ipynb`, ordered idempotent cells with explanation between them. Best for a live demo or first time through.
+
+**Shell** — **[RUNBOOK.md](RUNBOOK.md)**, the same sequence as copy-pasteable commands. Best for CI, a terminal-only demo, or seeing exactly what the notebook does.
+
+Both drive the same Terraform and the same scripts; neither is a reimplementation of the other.
 
 ## Run it as a notebook
 
@@ -150,8 +159,11 @@ terraform init && terraform apply
 ## 4. Run the demo
 
 ```bash
-$(terraform output -raw invoke_command)
+eval "$(terraform output -raw invoke_command)"
 ```
+
+`eval` is required, not decoration: the output ends in `| jq .`, and bash parses operators
+before expansion — so a bare `$(...)` would hand `aws` the literal arguments `|`, `jq`, `.`.
 
 ```json
 {
@@ -162,7 +174,9 @@ $(terraform output -raw invoke_command)
     "issuer": "CN=example.teleport.sh,O=example.teleport.sh",
     "not_before": "2026-09-28T17:02:50Z",
     "not_after": "2026-09-28T18:03:50Z",
-    "hint": "postgres-client"
+    "hint": "postgres-client",
+    "reused": false,
+    "expires_in": "59m32s"
   },
   "database": {
     "current_user": "lambda_svid_demo",
@@ -186,7 +200,7 @@ $(terraform output -raw invoke_command)
      application_name=tbot-lambda-demo
      SSL enabled (protocol=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384, bits=256)
    ```
-4. **Short-lived and per-invoke.** `not_after` is at most 1h out (`svid_ttl`), and every invoke gets a *different* `serial` — nothing is cached.
+4. **Short-lived, and rotated without anyone's involvement.** `not_after` is at most 1h out (`svid_ttl`). Warm invokes reuse the SVID from memory (`"reused": true`) and tbot pushes a replacement before it expires — no operator action, no stored secret that could have been rotated badly. Set `svid_cache = false` to show a distinct `serial` on every invoke instead.
 5. **Teleport audit log.** The bot join event (method `iam`, with the Lambda's assumed-role ARN) and an SVID issuance event per invoke.
 6. **Policy on both sides.** Teleport decides *who gets* the identity: `join.iam.arn` and `workload.unix.binary_path` must match. Postgres decides *what it can do*: `GRANT`s to `lambda_svid_demo`. Neither trusts the other's decision.
 7. **Negative tests:**
@@ -203,6 +217,30 @@ terraform -chdir=terraform/db destroy     # EC2, security group, key pair, local
 ```
 
 The database module destroys the instance and its EBS volume, so the recorded invocations go with it, and the generated SSH key becomes unrecoverable. Your pre-existing VPC, subnet, and internet gateway are never touched. Notebook Step 12 does the same thing behind a `DESTROY = False` gate.
+
+## SVID reuse across warm invokes
+
+Fetching a fresh SVID every invoke costs a round trip to Teleport — about **230 ms** measured, which dwarfs the ~11 ms database connection. So by default the handler holds a `workloadapi.X509Source` in a package-level variable. Lambda keeps the execution environment in memory between invokes, so it survives, and warm invokes are served from memory with `fetch_svid` near zero.
+
+`tbot`'s `workload-identity-api` renews ahead of expiry and **pushes** the replacement over the Workload API stream, so the source normally already holds a valid SVID. The stream survives a freeze: it's a Unix socket with both ends inside the same paused microVM, and go-spiffe configures no gRPC keepalive, so there's no timer to trip when wall-clock jumps.
+
+**The handler nonetheless re-checks remaining validity on every invoke.** That guard is unusual, and the reason is specific to Lambda:
+
+> A long-running program doesn't need it. The push is reliable, and if the client misses one it's because the process died — at which point it restarts and gets a fresh SVID on the way up. Lambda breaks that assumption: the process doesn't die, it **freezes**, then resumes holding state that silently aged while suspended.
+
+Two failure modes follow, both covered by the guard:
+
+- **Frozen past expiry.** Nothing renews while frozen. Idle longer than the TTL and the source thaws holding an expired certificate.
+- **Thaw ordering.** On thaw the watcher goroutine and the invoke both become runnable, and nothing orders them. A pushed update may not have been processed yet when the handler reads.
+
+When validity is under 5 minutes the handler calls `WaitUntilUpdated` to let the watcher deliver, and falls back to a direct `FetchX509SVID` if nothing arrives — so the slow path is never worse than running with no cache at all.
+
+| `svid_cache` | Behaviour |
+|---|---|
+| `true` (default) | Reuse while >5 min validity remains. `fetch_svid` ≈ 0 ms warm |
+| `false` | Fresh SVID every invoke, distinct `serial` each time, `fetch_svid` ≈ 230 ms |
+
+The 5-minute margin has to cover the database handshake plus clock skew — Postgres validates `notAfter` against *its* clock, not the Lambda's. Note also that Postgres only checks at handshake time, so an already-open connection outlives its certificate.
 
 ## How the extension behaves
 

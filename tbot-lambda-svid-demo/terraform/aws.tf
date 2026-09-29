@@ -80,6 +80,9 @@ resource "aws_lambda_function" "demo" {
       # Read by both the extension (listen address) and go-spiffe (dial address)
       SPIFFE_ENDPOINT_SOCKET = local.socket
 
+      # Read by the handler: reuse the SVID across warm invokes, or not.
+      SVID_CACHE = tostring(var.svid_cache)
+
       # Read by the handler
       DB_HOST          = var.db_host
       DB_PORT          = tostring(var.db_port)

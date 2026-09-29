@@ -44,6 +44,12 @@ variable "svid_ttl" {
   default     = "1h"
 }
 
+variable "svid_cache" {
+  description = "Reuse the SVID across warm invokes while it has validity left. false fetches a fresh SVID every invoke (~230ms slower, but shows a new serial each time)."
+  type        = bool
+  default     = true
+}
+
 variable "require_binary_path" {
   description = "Also require the workload (Unix attestation) to be /var/task/bootstrap. Set false if attestation fails in your environment."
   type        = bool

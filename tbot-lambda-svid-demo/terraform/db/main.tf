@@ -31,21 +31,29 @@ variable "aws_region" {
   default = "us-east-1"
 }
 
+// No defaults on these three: they're environment-specific, and a wrong value
+// silently provisions into the wrong network. Terraform fails if they're unset.
+
 variable "vpc_id" {
-  type    = string
-  default = "vpc-130d6375"
+  description = "VPC to place the Postgres host in."
+  type        = string
 }
 
 variable "subnet_id" {
   description = "Public subnet; the instance needs a public IP so the (non-VPC) Lambda can reach it."
   type        = string
-  default     = "subnet-4f520514"
 }
 
 variable "admin_cidr" {
-  description = "CIDR allowed to SSH in for setup."
+  description = "CIDR allowed to SSH in for setup, normally your own address as a /32."
   type        = string
-  default     = "70.108.34.53/32"
+
+  # A bare IP is the easy mistake here, and the AWS API rejects it with a less
+  # obvious error much later in the apply.
+  validation {
+    condition     = can(cidrhost(var.admin_cidr, 0))
+    error_message = "admin_cidr must be CIDR notation, e.g. 203.0.113.10/32. A bare IP address is not valid."
+  }
 }
 
 variable "instance_type" {

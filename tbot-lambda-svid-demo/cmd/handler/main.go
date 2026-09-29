@@ -19,6 +19,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
@@ -43,6 +44,11 @@ type svidInfo struct {
 	NotBefore time.Time `json:"not_before"`
 	NotAfter  time.Time `json:"not_after"`
 	Hint      string    `json:"hint,omitempty"`
+
+	// Reused is true when this SVID came from the in-memory source rather than a
+	// fresh round trip to Teleport. ExpiresIn is its remaining validity.
+	Reused    bool   `json:"reused"`
+	ExpiresIn string `json:"expires_in"`
 }
 
 type dbInfo struct {
@@ -58,6 +64,126 @@ type timings struct {
 	DBQuery   int64 `json:"db_query"`
 }
 
+// ---------------------------------------------------------------------------
+// SVID reuse across warm invokes
+//
+// Fetching a fresh SVID on every invoke costs a round trip to Teleport (~230ms
+// observed). Lambda keeps the execution environment in memory between invokes,
+// so an X509Source held in a package variable survives and serves subsequent
+// invokes from memory.
+//
+// tbot's workload-identity-api renews ahead of expiry and pushes the new SVID
+// over the Workload API stream, so the source usually already holds a valid one.
+// Two things still have to be handled:
+//
+//   - Freeze. Between invokes the whole sandbox is frozen, so nothing is
+//     renewed. Idle longer than the SVID TTL and the source wakes up holding an
+//     expired certificate.
+//   - Thaw ordering. On thaw the watcher goroutine and this invoke both become
+//     runnable and nothing orders them, so a pushed update may not have been
+//     processed yet when we read.
+//
+// Hence: always check remaining validity, and if it's short, wait for the
+// watcher rather than assuming it has caught up.
+//
+// A long-running program normally needs none of this. The push is reliable, and
+// if the client misses one it is because the process died -- at which point it
+// restarts and gets a fresh SVID on the way up. Lambda breaks that assumption:
+// the process does not die, it freezes, and then resumes holding state that
+// silently aged while it was suspended. That is what the guard below is for.
+// ---------------------------------------------------------------------------
+
+const (
+	// Validity that must remain for an SVID to be reused. Has to cover the
+	// database handshake plus clock skew -- Postgres checks notAfter against its
+	// own clock, not ours.
+	refreshBefore = 5 * time.Minute
+
+	sourceInitTimeout = 10 * time.Second
+	svidWaitTimeout   = 5 * time.Second
+	fetchTimeout      = 5 * time.Second
+)
+
+var (
+	sourceOnce sync.Once
+	source     *workloadapi.X509Source
+	sourceErr  error
+)
+
+// svidSource returns the process-wide X509Source, creating it on first use.
+//
+// Created lazily rather than in init(): the extension blocks INIT until tbot
+// reports ready, so by the time a handler runs the socket is guaranteed to
+// exist. NewX509Source also blocks until the first SVID arrives, which would be
+// a poor thing to do during INIT's 10s budget.
+//
+// The context bounds only the initial dial and that first wait -- go-spiffe runs
+// the watch stream on context.Background() internally -- so a timeout here is
+// safe and will not tear down the stream afterwards.
+func svidSource() (*workloadapi.X509Source, error) {
+	sourceOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), sourceInitTimeout)
+		defer cancel()
+		source, sourceErr = workloadapi.NewX509Source(ctx)
+	})
+	return source, sourceErr
+}
+
+// getSVID returns an X509-SVID and whether it was reused from memory.
+//
+// Set SVID_CACHE=false to fetch a fresh SVID on every invoke, which is the
+// original behaviour and useful for comparing timings side by side.
+func getSVID(ctx context.Context) (*x509svid.SVID, bool, error) {
+	if os.Getenv("SVID_CACHE") == "false" {
+		svid, err := fetchOnce(ctx)
+		return svid, false, err
+	}
+
+	src, err := svidSource()
+	if err != nil {
+		return nil, false, fmt.Errorf("creating X509Source: %w", err)
+	}
+
+	svid, err := src.GetX509SVID()
+	if err != nil {
+		return nil, false, fmt.Errorf("reading SVID from source: %w", err)
+	}
+	if remaining(svid) > refreshBefore {
+		return svid, true, nil
+	}
+
+	// Close to expiry. Give the watcher a chance to deliver the rotation tbot
+	// has probably already pushed.
+	log.Printf("SVID expires in %s; waiting for a pushed rotation", remaining(svid).Round(time.Second))
+	waitCtx, cancel := context.WithTimeout(ctx, svidWaitTimeout)
+	defer cancel()
+	if err := src.WaitUntilUpdated(waitCtx); err == nil {
+		if fresh, err := src.GetX509SVID(); err == nil {
+			return fresh, false, nil
+		}
+	}
+
+	// No rotation arrived in time. Fall back to a one-shot fetch so this path is
+	// never worse than running without the cache at all.
+	log.Printf("no rotation pushed; falling back to a direct fetch")
+	svid, err = fetchOnce(ctx)
+	return svid, false, err
+}
+
+func fetchOnce(ctx context.Context) (*x509svid.SVID, error) {
+	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
+	defer cancel()
+	svid, err := workloadapi.FetchX509SVID(fetchCtx)
+	if err != nil {
+		return nil, fmt.Errorf("fetching X509-SVID from workload API: %w", err)
+	}
+	return svid, nil
+}
+
+func remaining(s *x509svid.SVID) time.Duration {
+	return time.Until(s.Certificates[0].NotAfter)
+}
+
 func handle(ctx context.Context, _ map[string]any) (*response, error) {
 	resp := &response{}
 	requestID := ""
@@ -65,18 +191,20 @@ func handle(ctx context.Context, _ map[string]any) (*response, error) {
 		requestID = lc.AwsRequestID
 	}
 
-	// 1. Fetch an X509-SVID from tbot's Workload API. go-spiffe reads the socket
-	//    address from SPIFFE_ENDPOINT_SOCKET (set in the function env).
+	// 1. Obtain an X509-SVID. Reused from the in-memory X509Source when it still
+	//    has validity left, otherwise fetched from tbot's Workload API.
+	//    go-spiffe reads the socket address from SPIFFE_ENDPOINT_SOCKET.
 	t0 := time.Now()
-	fetchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	svid, err := workloadapi.FetchX509SVID(fetchCtx)
-	cancel()
+	svid, reused, err := getSVID(ctx)
 	resp.Timings.FetchSVID = time.Since(t0).Milliseconds()
 	if err != nil {
-		return nil, fmt.Errorf("fetching X509-SVID from workload API: %w", err)
+		return nil, fmt.Errorf("obtaining X509-SVID: %w", err)
 	}
 	resp.SVID = describe(svid)
-	log.Printf("got SVID %s (serial %s, expires %s)", resp.SVID.SPIFFEID, resp.SVID.Serial, resp.SVID.NotAfter.Format(time.RFC3339))
+	resp.SVID.Reused = reused
+	resp.SVID.ExpiresIn = remaining(svid).Round(time.Second).String()
+	log.Printf("SVID %s serial=%s reused=%t expires_in=%s",
+		resp.SVID.SPIFFEID, resp.SVID.Serial, reused, resp.SVID.ExpiresIn)
 
 	if os.Getenv("DB_HOST") == "" {
 		resp.Error = "DB_HOST not set; skipping database step"
